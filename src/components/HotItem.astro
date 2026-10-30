@@ -1,0 +1,40 @@
+---
+import type { NewsItem } from '../lib/news';
+import { fmtShort, fmtTime } from '../lib/format';
+import Credibility from './Credibility.astro';
+import ExternalIcon from './ExternalIcon.astro';
+
+interface Props { item: NewsItem; rank: number }
+const { item, rank } = Astro.props;
+const lead = rank <= 3;
+---
+<li class:list={['hot', { lead }]}>
+  <span class="rank" aria-label={`${rank}위`}>{rank}</span>
+  <div class="hot-body">
+    <h3 class="hot-title">
+      <a href={item.url} target="_blank" rel="noopener noreferrer">{item.titleKo}</a>
+    </h3>
+    <p class="hot-summary">{item.summary}</p>
+
+    {item.keyPoints.length > 0 && (
+      <details class="points">
+        <summary>핵심 내용 {item.keyPoints.length}가지</summary>
+        <ul>{item.keyPoints.map((p) => <li>{p}</li>)}</ul>
+      </details>
+    )}
+
+    <div class="hot-foot">
+    <div class="hot-meta">
+      <span class="heat" title={`인기도 ${Math.round(item.hotScore)}점`}>
+        <span class="heat-bar" aria-hidden="true"><i style={`width:${Math.round(item.hotScore)}%`}></i></span>
+        <span>인기도 {Math.round(item.hotScore)}</span>
+      </span>
+      {item.coverage > 1 && <span class="coverage">{item.coverage}개 매체 보도</span>}
+      <span class="source">{item.source}</span>
+      <time datetime={item.publishedAt.toISOString()}>{fmtShort(item.publishedAt)} {fmtTime(item.publishedAt)}</time>
+      <Credibility value={item.credibility} />
+    </div>
+      <a class="origin" href={item.url} target="_blank" rel="noopener noreferrer">원문 보기 <ExternalIcon /></a>
+    </div>
+  </div>
+</li>

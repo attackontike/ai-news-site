@@ -1,0 +1,36 @@
+---
+import type { NewsItem } from '../lib/news';
+import { fmtTime } from '../lib/format';
+import Credibility from './Credibility.astro';
+import ExternalIcon from './ExternalIcon.astro';
+
+interface Props { item: NewsItem }
+const { item } = Astro.props;
+const showOriginal = item.title.trim() !== item.titleKo.trim();
+---
+<article class="story" data-tags={item.tags.join('|')}>
+  <div class="story-meta">
+    <span class="source">{item.source}</span>
+    <time datetime={item.publishedAt.toISOString()}>{fmtTime(item.publishedAt)}</time>
+    <Credibility value={item.credibility} />
+  </div>
+  <h3 class="story-title">
+    <a href={item.url} target="_blank" rel="noopener noreferrer">{item.titleKo}</a>
+  </h3>
+  {showOriginal && <p class="story-original" lang="en">{item.title}</p>}
+  <p class="story-summary">{item.summary}</p>
+
+  {item.keyPoints.length > 0 && (
+    <details class="points">
+      <summary>핵심 내용 {item.keyPoints.length}가지</summary>
+      <ul>{item.keyPoints.map((p) => <li>{p}</li>)}</ul>
+    </details>
+  )}
+
+  <div class="story-foot">
+    <ul class="tags" aria-label="태그">{item.tags.map((t) => <li>{t}</li>)}</ul>
+    <a class="origin" href={item.url} target="_blank" rel="noopener noreferrer">
+      원문 보기 <ExternalIcon />
+    </a>
+  </div>
+</article>

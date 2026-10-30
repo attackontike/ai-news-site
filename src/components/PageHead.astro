@@ -1,0 +1,9 @@
+---
+interface Props { title: string; lead: string; facts: string[] }
+const { title, lead, facts } = Astro.props;
+---
+<header class="page-head">
+  <h1>{title}</h1>
+  <p class="lead">{lead}</p>
+  <ul class="facts" aria-label="선정 기준">{facts.map((f) => <li>{f}</li>)}</ul>
+</header>

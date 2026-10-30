@@ -1,0 +1,86 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import NewsItem from '../components/NewsItem.astro';
+import Empty from '../components/Empty.astro';
+import { render } from 'astro:content';
+import { loadNews, RULES } from '../lib/news';
+import { dayKey, dayLabel } from '../lib/format';
+
+const { latest, ref, weekly } = await loadNews();
+const Briefing = latest ? (await render(latest)).Content : null;
+
+// 날짜별 그룹
+const groups = new Map<string, typeof weekly>();
+for (const it of weekly) {
+  const k = dayKey(it.publishedAt);
+  groups.set(k, [...(groups.get(k) ?? []), it]);
+}
+
+// 많이 쓰인 태그 상위 8개 → 필터
+const tagCount = new Map<string, number>();
+weekly.forEach((i) => i.tags.forEach((t) => tagCount.set(t, (tagCount.get(t) ?? 0) + 1)));
+const topTags = [...tagCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+---
+<BaseLayout title="AI 최근1주일 News" description="신뢰도 높은 매체의 최근 7일 AI 뉴스 요약" section="weekly">
+  <PageHead
+    title="AI 최근1주일 News"
+    lead="공식 발표와 신뢰도 높은 매체의 AI 기사를 최신순으로 모았습니다."
+    facts={[`최근 ${RULES.weeklyDays}일`, `신뢰도 ${RULES.weeklyMinCredibility}점 이상`, `${weekly.length}건`]}
+  />
+
+  {Briefing && (
+    <section class="briefing" aria-labelledby="briefing-h">
+      <h2 id="briefing-h">오늘의 브리핑</h2>
+      <div class="prose"><Briefing /></div>
+    </section>
+  )}
+
+  {weekly.length === 0 ? <Empty /> : (
+    <>
+      {topTags.length > 0 && (
+        <div class="filter" role="group" aria-label="태그로 거르기">
+          <button type="button" class="chip" aria-pressed="true" data-tag="">전체</button>
+          {topTags.map((t) => <button type="button" class="chip" aria-pressed="false" data-tag={t}>{t}</button>)}
+        </div>
+      )}
+      {[...groups.entries()].map(([k, items]) => {
+        const { rel, full } = dayLabel(k, ref);
+        return (
+          <section class="day" data-day>
+            <h2 class="day-head">
+              {rel && <span class="day-rel">{rel}</span>}
+              <span>{full}</span>
+              <span class="day-count">{items.length}건</span>
+            </h2>
+            {items.map((item) => <NewsItem item={item} />)}
+          </section>
+        );
+      })}
+      <p class="filter-empty" hidden>이 태그의 기사가 없습니다. 다른 태그를 선택해 보세요.</p>
+    </>
+  )}
+</BaseLayout>
+
+<script>
+  const chips = document.querySelectorAll<HTMLButtonElement>('.chip');
+  const emptyMsg = document.querySelector<HTMLElement>('.filter-empty');
+  chips.forEach((chip) =>
+    chip.addEventListener('click', () => {
+      const tag = chip.dataset.tag ?? '';
+      chips.forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+      let shown = 0;
+      document.querySelectorAll<HTMLElement>('[data-day]').forEach((day) => {
+        let n = 0;
+        day.querySelectorAll<HTMLElement>('.story').forEach((s) => {
+          const ok = !tag || (s.dataset.tags ?? '').split('|').includes(tag);
+          s.hidden = !ok;
+          if (ok) n++;
+        });
+        day.hidden = n === 0;
+        shown += n;
+      });
+      if (emptyMsg) emptyMsg.hidden = shown > 0;
+    }),
+  );
+</script>

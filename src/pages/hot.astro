@@ -1,0 +1,18 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHead from '../components/PageHead.astro';
+import HotItem from '../components/HotItem.astro';
+import Empty from '../components/Empty.astro';
+import { loadNews, RULES } from '../lib/news';
+const { aiHot } = await loadNews();
+---
+<BaseLayout title="AI Hot News" description="최근 3일간 가장 주목받은 AI 뉴스" section="hot">
+  <PageHead
+    title="AI Hot News"
+    lead="최근 3일 동안 여러 매체가 함께 다루고 커뮤니티 반응이 컸던 AI 기사 순위입니다."
+    facts={[`최근 ${RULES.hotDays}일`, '인기도 순', `상위 ${aiHot.length}건`]}
+  />
+  {aiHot.length === 0 ? <Empty /> : (
+    <ol class="hot-list">{aiHot.map((item, i) => <HotItem item={item} rank={i + 1} />)}</ol>
+  )}
+</BaseLayout>

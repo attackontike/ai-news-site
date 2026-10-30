@@ -1,0 +1,10 @@
+---
+interface Props { value: number }
+const { value } = Astro.props;
+---
+<span class="cred" title={`신뢰도 ${value}/5`} aria-label={`신뢰도 5점 중 ${value}점`}>
+  <span class="cred-label">신뢰도</span>
+  <span class="cred-dots" aria-hidden="true">
+    {[1, 2, 3, 4, 5].map((n) => <i class={n <= value ? 'on' : ''}></i>)}
+  </span>
+</span>
