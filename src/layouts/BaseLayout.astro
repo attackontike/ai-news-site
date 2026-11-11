@@ -2,44 +2,60 @@
 import '../styles/global.css';
 import Sidebar from '../components/Sidebar.astro';
 
+export type Section = 'week' | 'hot' | 'world';
+
 interface Props {
   title: string;
   description: string;
-  section: 'weekly' | 'hot' | 'world';
+  section: Section;
 }
+
 const { title, description, section } = Astro.props;
+const siteName = 'AI 뉴스 브리프';
+const fullTitle = `${title} | ${siteName}`;
 ---
+
 <!doctype html>
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1d23" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {Astro.site && <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />}
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
     />
-    <title>{title} | AI 뉴스 브리프</title>
+    <title>{fullTitle}</title>
   </head>
   <body data-section={section}>
-    <a class="skip" href="#main">본문으로 건너뛰기</a>
     <div class="shell">
-      <Sidebar current={section} />
-      <main id="main" class="main">
-        <slot />
+      <Sidebar active={section} />
+      <main class="main" id="main">
+        <div class="content">
+          <slot />
+        </div>
       </main>
     </div>
+
     <script>
-      // 모바일 상단 메뉴 높이만큼 날짜 제목이 붙도록 보정
-      const rail = document.querySelector<HTMLElement>('.rail');
-      const mq = window.matchMedia('(max-width: 900px)');
-      const sync = () => document.documentElement.style.setProperty('--top-h', mq.matches && rail ? `${rail.offsetHeight}px` : '0px');
-      if (rail) new ResizeObserver(sync).observe(rail);
-      mq.addEventListener('change', sync);
-      sync();
-      if (mq.matches) document.querySelector('.nav-item[aria-current]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+      // 모바일 상단 고정 보정: 상단 탭 높이만큼 날짜 제목과 앵커 위치를 내립니다.
+      const bar = document.querySelector<HTMLElement>('.sidebar');
+      const mq = window.matchMedia('(max-width: 860px)');
+      const apply = () => {
+        const h = mq.matches && bar ? bar.offsetHeight : 0;
+        document.documentElement.style.setProperty('--topbar-h', `${h}px`);
+      };
+      if (bar) new ResizeObserver(apply).observe(bar);
+      mq.addEventListener('change', apply);
+      apply();
     </script>
   </body>
 </html>

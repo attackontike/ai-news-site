@@ -1,86 +1,96 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
-import PageHead from '../components/PageHead.astro';
-import NewsItem from '../components/NewsItem.astro';
-import Empty from '../components/Empty.astro';
 import { render } from 'astro:content';
-import { loadNews, RULES } from '../lib/news';
-import { dayKey, dayLabel } from '../lib/format';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import NewsItem from '../components/NewsItem.astro';
+import { getNewsData, groupByDay, topTags, RULES } from '../lib/news';
+import { formatDayHeading, formatDateTime } from '../lib/format';
 
-const { latest, ref, weekly } = await loadNews();
-const Briefing = latest ? (await render(latest)).Content : null;
-
-// 날짜별 그룹
-const groups = new Map<string, typeof weekly>();
-for (const it of weekly) {
-  const k = dayKey(it.publishedAt);
-  groups.set(k, [...(groups.get(k) ?? []), it]);
-}
-
-// 많이 쓰인 태그 상위 8개 → 필터
-const tagCount = new Map<string, number>();
-weekly.forEach((i) => i.tags.forEach((t) => tagCount.set(t, (tagCount.get(t) ?? 0) + 1)));
-const topTags = [...tagCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+const data = await getNewsData();
+const days = groupByDay(data.weekly);
+const tags = topTags(data.weekly);
+const Briefing = data.latest ? (await render(data.latest)).Content : null;
+const hasBriefing = Boolean(data.latest?.body?.trim());
 ---
-<BaseLayout title="AI 최근1주일 News" description="신뢰도 높은 매체의 최근 7일 AI 뉴스 요약" section="weekly">
-  <PageHead
-    title="AI 최근1주일 News"
-    lead="공식 발표와 신뢰도 높은 매체의 AI 기사를 최신순으로 모았습니다."
-    facts={[`최근 ${RULES.weeklyDays}일`, `신뢰도 ${RULES.weeklyMinCredibility}점 이상`, `${weekly.length}건`]}
-  />
 
-  {Briefing && (
-    <section class="briefing" aria-labelledby="briefing-h">
-      <h2 id="briefing-h">오늘의 브리핑</h2>
-      <div class="prose"><Briefing /></div>
-    </section>
-  )}
+<BaseLayout
+  title="AI 최근1주일 News"
+  description="신뢰도 높은 최근 7일 AI 기사를 한국어 요약과 함께 모았습니다."
+  section="week"
+>
+  <header class="page-head">
+    <h1>AI 최근1주일 News</h1>
+    <p>최근 {RULES.weekly.days}일 동안 나온 AI 기사 중 신뢰도 {RULES.weekly.minCredibility} 이상만 모았습니다.</p>
+  </header>
 
-  {weekly.length === 0 ? <Empty /> : (
-    <>
-      {topTags.length > 0 && (
-        <div class="filter" role="group" aria-label="태그로 거르기">
-          <button type="button" class="chip" aria-pressed="true" data-tag="">전체</button>
-          {topTags.map((t) => <button type="button" class="chip" aria-pressed="false" data-tag={t}>{t}</button>)}
-        </div>
-      )}
-      {[...groups.entries()].map(([k, items]) => {
-        const { rel, full } = dayLabel(k, ref);
-        return (
-          <section class="day" data-day>
-            <h2 class="day-head">
-              {rel && <span class="day-rel">{rel}</span>}
-              <span>{full}</span>
-              <span class="day-count">{items.length}건</span>
-            </h2>
-            {items.map((item) => <NewsItem item={item} />)}
-          </section>
-        );
-      })}
-      <p class="filter-empty" hidden>이 태그의 기사가 없습니다. 다른 태그를 선택해 보세요.</p>
-    </>
-  )}
+  {
+    Briefing && hasBriefing && (
+      <section class="briefing" aria-labelledby="briefing-title">
+        <h2 id="briefing-title">
+          오늘의 브리핑
+          {data.referenceTime && <span class="when">{formatDateTime(data.referenceTime)}</span>}
+        </h2>
+        <Briefing />
+      </section>
+    )
+  }
+
+  {
+    tags.length > 0 && (
+      <div class="filters" role="group" aria-label="태그로 거르기">
+        <button class="chip" type="button" data-tag="" aria-pressed="true">전체</button>
+        {tags.map((t) => (
+          <button class="chip" type="button" data-tag={t} aria-pressed="false">
+            #{t}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  {
+    days.length === 0 ? (
+      <p class="empty">아직 표시할 기사가 없습니다. n8n 워크플로를 한 번 실행하면 이곳에 기사가 채워집니다.</p>
+    ) : (
+      days.map((day) => (
+        <section class="day" data-day>
+          <h2 class="day-head">
+            {formatDayHeading(day.key)}
+            <span class="n">{day.items.length}건</span>
+          </h2>
+          <div class="day-list">
+            {day.items.map((item) => (
+              <NewsItem item={item} />
+            ))}
+          </div>
+        </section>
+      ))
+    )
+  }
+  <p class="empty" id="filter-empty" hidden>이 태그가 붙은 기사가 없습니다. 다른 태그를 고르거나 전체를 눌러 주세요.</p>
 </BaseLayout>
 
 <script>
   const chips = document.querySelectorAll<HTMLButtonElement>('.chip');
-  const emptyMsg = document.querySelector<HTMLElement>('.filter-empty');
-  chips.forEach((chip) =>
-    chip.addEventListener('click', () => {
-      const tag = chip.dataset.tag ?? '';
-      chips.forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
-      let shown = 0;
-      document.querySelectorAll<HTMLElement>('[data-day]').forEach((day) => {
-        let n = 0;
-        day.querySelectorAll<HTMLElement>('.story').forEach((s) => {
-          const ok = !tag || (s.dataset.tags ?? '').split('|').includes(tag);
-          s.hidden = !ok;
-          if (ok) n++;
-        });
-        day.hidden = n === 0;
-        shown += n;
-      });
-      if (emptyMsg) emptyMsg.hidden = shown > 0;
-    }),
-  );
+  const items = document.querySelectorAll<HTMLElement>('.news');
+  const days = document.querySelectorAll<HTMLElement>('[data-day]');
+  const empty = document.getElementById('filter-empty');
+
+  function applyFilter(tag: string) {
+    chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.tag === tag)));
+    items.forEach((el) => {
+      const tags = (el.dataset.tags ?? '').split('|');
+      el.hidden = tag !== '' && !tags.includes(tag);
+    });
+    let visibleDays = 0;
+    days.forEach((d) => {
+      const n = d.querySelectorAll('.news:not([hidden])').length;
+      d.hidden = n === 0;
+      const count = d.querySelector('.n');
+      if (count) count.textContent = `${n}건`;
+      if (n > 0) visibleDays++;
+    });
+    if (empty) empty.hidden = visibleDays > 0 || days.length === 0;
+  }
+
+  chips.forEach((c) => c.addEventListener('click', () => applyFilter(c.dataset.tag ?? '')));
 </script>

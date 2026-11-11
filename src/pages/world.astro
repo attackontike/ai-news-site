@@ -1,18 +1,19 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import PageHead from '../components/PageHead.astro';
-import HotItem from '../components/HotItem.astro';
-import Empty from '../components/Empty.astro';
-import { loadNews, RULES } from '../lib/news';
-const { worldHot } = await loadNews();
+import HotPage from '../components/HotPage.astro';
+import { getNewsData, RULES } from '../lib/news';
+
+const { worldHot } = await getNewsData();
 ---
-<BaseLayout title="국제 Hot News" description="최근 3일간 세계 주요 뉴스" section="world">
-  <PageHead
+
+<BaseLayout
+  title="국제 Hot News"
+  description="최근 3일 세계 주요 뉴스 중 여러 매체가 함께 다룬 소식을 순위로 보여 줍니다."
+  section="world"
+>
+  <HotPage
     title="국제 Hot News"
-    lead="최근 3일 동안 세계 주요 통신사와 언론이 가장 많이 다룬 국제 뉴스 순위입니다."
-    facts={[`최근 ${RULES.hotDays}일`, '인기도 순', `상위 ${worldHot.length}건`]}
+    lead={`최근 ${RULES.worldHot.days}일 세계 주요 뉴스 중 인기도 상위 ${RULES.worldHot.limit}건입니다.`}
+    items={worldHot}
   />
-  {worldHot.length === 0 ? <Empty /> : (
-    <ol class="hot-list">{worldHot.map((item, i) => <HotItem item={item} rank={i + 1} />)}</ol>
-  )}
 </BaseLayout>

@@ -1,39 +1,53 @@
 ---
-import { loadNews } from '../lib/news';
-import { fmtDateTime } from '../lib/format';
+import { getNewsData } from '../lib/news';
+import { formatDateTime } from '../lib/format';
 
-interface Props { current: 'weekly' | 'hot' | 'world' }
-const { current } = Astro.props;
-const { ref, weekly, aiHot, worldHot } = await loadNews();
-const discord = import.meta.env.PUBLIC_DISCORD_INVITE;
+interface Props {
+  active: 'week' | 'hot' | 'world';
+}
 
-const menu = [
-  { id: 'weekly', href: '/', label: 'AI 최근1주일 News', desc: '신뢰도 높은 매체의 7일간 기사', count: weekly.length },
-  { id: 'hot', href: '/hot', label: 'AI Hot News', desc: '최근 3일, 가장 많이 다뤄진 AI 기사', count: aiHot.length },
-  { id: 'world', href: '/world', label: '국제 Hot News', desc: '최근 3일 세계 주요 뉴스', count: worldHot.length },
-];
+const { active } = Astro.props;
+const data = await getNewsData();
+const invite = import.meta.env.PUBLIC_DISCORD_INVITE;
+
+const menus = [
+  { key: 'week', href: '/', label: 'AI 최근1주일 News', count: data.weekly.length },
+  { key: 'hot', href: '/hot', label: 'AI Hot News', count: data.aiHot.length },
+  { key: 'world', href: '/world', label: '국제 Hot News', count: data.worldHot.length },
+] as const;
+
+const updated = data.referenceTime ? formatDateTime(data.referenceTime) : '아직 없음';
 ---
-<header class="rail">
-  <a class="brand" href="/">
-    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" /><path d="M9 22V10h3.2l7.6 7.4V10H23v12h-3.2l-7.6-7.4V22z" /></svg>
-    <span class="brand-text">
-      <strong>AI 뉴스 브리프</strong>
-      <span>매일 아침 자동으로 모아 요약합니다</span>
-    </span>
-  </a>
 
-  <nav class="nav" aria-label="뉴스 메뉴">
-    {menu.map((m) => (
-      <a href={m.href} class="nav-item" data-id={m.id} aria-current={m.id === current ? 'page' : undefined}>
-        <span class="nav-label">{m.label}</span>
-        <span class="nav-desc">{m.desc}</span>
-        <span class="nav-count" aria-label={`${m.count}건`}>{m.count}</span>
-      </a>
-    ))}
+<aside class="sidebar">
+  <div class="side-top">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      AI 뉴스 브리프
+    </a>
+    <span class="updated-mobile" style="display:none">{updated} 업데이트</span>
+  </div>
+
+  <nav class="nav" aria-label="메뉴">
+    {
+      menus.map((m) => (
+        <a href={m.href} data-key={m.key} aria-current={m.key === active ? 'page' : undefined}>
+          {m.label}
+          <span class="count" aria-label={`${m.count}건`}>{m.count}</span>
+        </a>
+      ))
+    }
   </nav>
 
-  <div class="rail-foot">
-    <p>마지막 업데이트<br /><time datetime={ref.toISOString()}>{fmtDateTime(ref)}</time></p>
-    {discord && <a class="discord" href={discord} target="_blank" rel="noopener">Discord에서 알림 받기</a>}
+  <div class="side-foot">
+    <span>마지막 업데이트<br /><strong>{updated}</strong></span>
+    <span>매일 오전 7시에 새 소식을 모읍니다.</span>
+    {
+      invite && (
+        <a class="discord" href={invite} target="_blank" rel="noopener noreferrer">
+          Discord에서 알림 받기
+        </a>
+      )
+    }
   </div>
-</header>
+</aside>

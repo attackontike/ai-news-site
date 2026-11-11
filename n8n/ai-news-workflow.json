@@ -1,7 +1,15 @@
 {
-  "name": "AI 뉴스 브리프 - 매일 수집",
+  "name": "AI 뉴스 브리프",
   "nodes": [
     {
+      "id": "n01",
+      "name": "매일 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
       "parameters": {
         "rule": {
           "interval": [
@@ -11,114 +19,166 @@
             }
           ]
         }
-      },
-      "id": "7f87a7cb-0968-4e2e-81f0-76b6a9bb3688",
-      "name": "매일 07:00",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        0,
-        300
-      ]
+      }
     },
     {
-      "parameters": {
-        "jsCode": "// ▼ 여기만 수정하세요 ▼\nreturn [{\n  json: {\n    githubOwner: 'YOUR_GITHUB_ID',\n    githubRepo: 'ai-news-site',\n    githubBranch: 'main',\n    siteUrl: 'https://your-site.vercel.app',\n    geminiModel: 'gemini-2.5-flash',\n    discordWebhookUrl: 'https://discord.com/api/webhooks/XXXX/YYYY',\n    maxItemsForGemini: 90,   // Gemini에 넘길 최대 기사 수\n    maxPerSource: 10,        // 매체당 최대 기사 수 (한 매체 쏠림 방지)\n  },\n}];\n"
-      },
-      "id": "4f51e254-0b0a-436f-b640-0453fd26f953",
+      "id": "n02",
       "name": "설정",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         220,
-        300
-      ]
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ▼ 사용자가 바꿀 값은 이 노드에만 있습니다.\nconst config = {\n  githubOwner: 'YOUR_GITHUB_ID',      // GitHub 아이디\n  githubRepo: 'ai-news-site',         // 저장소 이름\n  githubBranch: 'main',\n  contentDir: 'src/content/news',\n  siteUrl: 'https://ai-news-site.vercel.app', // 실제 사이트 주소 (Discord 메시지 링크용)\n  geminiModel: 'gemini-2.5-flash',\n  discordWebhookUrl: '',              // Discord 웹훅 URL (비워 두면 알림 생략)\n  aiDays: 7,                          // AI 기사 수집 기간(일)\n  worldDays: 3,                       // 국제 기사 수집 기간(일)\n  maxPerSource: 10,                   // 매체당 최대 기사 수\n  maxTotal: 90,                       // 전체 최대 기사 수\n};\n\n// 피드를 추가·삭제하려면 이 목록만 고치세요. trust: 매체 기본 신뢰도(1~5)\nconst feeds = [\n  { category: 'ai', source: 'OpenAI', url: 'https://openai.com/news/rss.xml', trust: 5 },\n  { category: 'ai', source: 'Google AI Blog', url: 'https://blog.google/technology/ai/rss/', trust: 5 },\n  { category: 'ai', source: 'Google DeepMind', url: 'https://deepmind.google/blog/rss.xml', trust: 5 },\n  { category: 'ai', source: 'MIT Technology Review', url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed', trust: 5 },\n  { category: 'ai', source: 'Hugging Face', url: 'https://huggingface.co/blog/feed.xml', trust: 4 },\n  { category: 'ai', source: 'TechCrunch', url: 'https://techcrunch.com/category/artificial-intelligence/feed/', trust: 4 },\n  { category: 'ai', source: 'The Verge', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', trust: 4 },\n  { category: 'ai', source: 'VentureBeat', url: 'https://venturebeat.com/category/ai/feed/', trust: 4 },\n  { category: 'ai', source: 'AI타임스', url: 'https://www.aitimes.com/rss/allArticle.xml', trust: 3 },\n  { category: 'ai', source: 'Hacker News', url: 'https://hnrss.org/newest?q=AI+OR+LLM+OR+GPT&points=100', trust: 3 },\n  { category: 'world', source: 'BBC News', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', trust: 5 },\n  { category: 'world', source: 'NPR', url: 'https://feeds.npr.org/1004/rss.xml', trust: 5 },\n  { category: 'world', source: 'The Guardian', url: 'https://www.theguardian.com/world/rss', trust: 4 },\n  { category: 'world', source: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', trust: 4 },\n  { category: 'world', source: '연합뉴스', url: 'https://www.yna.co.kr/rss/international.xml', trust: 4 },\n];\n\nreturn feeds.map((f) => ({ json: { ...f, config } }));\n"
+      }
     },
     {
-      "parameters": {
-        "jsCode": "// trust: 매체 기본 신뢰도(1~5). hn: 해커뉴스(포인트 기반 인기 신호)\n// URL은 매체 사정으로 바뀔 수 있으니 첫 실행 때 RSS 노드 결과를 확인하세요.\nconst feeds = [\n  // ── AI ──\n  { category: 'ai', source: 'OpenAI', url: 'https://openai.com/news/rss.xml', trust: 5 },\n  { category: 'ai', source: 'Google AI Blog', url: 'https://blog.google/technology/ai/rss/', trust: 5 },\n  { category: 'ai', source: 'Google DeepMind', url: 'https://deepmind.google/blog/rss.xml', trust: 5 },\n  { category: 'ai', source: 'Hugging Face', url: 'https://huggingface.co/blog/feed.xml', trust: 4 },\n  { category: 'ai', source: 'MIT Technology Review', url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed', trust: 5 },\n  { category: 'ai', source: 'TechCrunch', url: 'https://techcrunch.com/category/artificial-intelligence/feed/', trust: 4 },\n  { category: 'ai', source: 'The Verge', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', trust: 4 },\n  { category: 'ai', source: 'VentureBeat', url: 'https://venturebeat.com/category/ai/feed/', trust: 4 },\n  { category: 'ai', source: 'AI타임스', url: 'https://www.aitimes.com/rss/allArticle.xml', trust: 3 },\n  { category: 'ai', source: 'Hacker News', url: 'https://hnrss.org/newest?q=AI+OR+LLM+OR+GPT&points=100', trust: 3, hn: true },\n  // ── 국제 ──\n  { category: 'world', source: 'BBC News', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', trust: 5 },\n  { category: 'world', source: 'NPR', url: 'https://feeds.npr.org/1004/rss.xml', trust: 5 },\n  { category: 'world', source: 'The Guardian', url: 'https://www.theguardian.com/world/rss', trust: 4 },\n  { category: 'world', source: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', trust: 4 },\n  { category: 'world', source: '연합뉴스', url: 'https://www.yna.co.kr/rss/international.xml', trust: 4 },\n];\nreturn feeds.map((f, i) => ({ json: { ...f, feedIndex: i } }));\n"
-      },
-      "id": "2b05a1e4-c26c-434f-9463-506c6bde131e",
-      "name": "RSS 피드 목록",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        440,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "url": "={{ $json.url }}",
-        "options": {}
-      },
-      "id": "168cf7b4-7c6a-4406-a67e-3ffbe826b520",
+      "id": "n04",
       "name": "RSS 읽기",
       "type": "n8n-nodes-base.rssFeedRead",
       "typeVersion": 1.1,
       "position": [
-        660,
-        300
+        440,
+        0
       ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "ignoreSSL": false
+        }
+      },
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
     },
     {
-      "parameters": {
-        "jsCode": "// RSS 결과 정리 → 기간 필터 → 중복 제거 → Gemini 요청 생성\nconst cfg = $('설정').first().json;\nconst feeds = $('RSS 피드 목록').all().map((i) => i.json);\nconst now = Date.now();\nconst DAY = 864e5;\nconst windowDays = { ai: 7, world: 3 };\n\nconst host = (u) => { try { return new URL(u).hostname.replace(/^www\\./, ''); } catch { return ''; } };\nconst clean = (s = '') => String(s).replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nconst seen = new Set();\nconst perSource = {};\nconst articles = [];\n\nfor (const item of $input.all()) {\n  const r = item.json;\n  if (!r || !r.link || !r.title) continue;               // 실패한 피드는 건너뜀\n  const p = Array.isArray(item.pairedItem) ? item.pairedItem[0] : item.pairedItem;\n  const feed = feeds[p?.item] ?? feeds.find((f) => host(r.link) && f.url.includes(host(r.link))) ?? { category: 'ai', source: host(r.link), trust: 2 };\n\n  const published = new Date(r.isoDate || r.pubDate || now);\n  if (isNaN(published)) continue;\n  if (now - published.getTime() > windowDays[feed.category] * DAY) continue;\n\n  let url = r.link;\n  try { const u = new URL(r.link); u.hash = ''; [...u.searchParams.keys()].filter((k) => k.startsWith('utm_')).forEach((k) => u.searchParams.delete(k)); url = u.toString(); } catch {}\n  const key = url.toLowerCase().replace(/\\/$/, '');\n  if (seen.has(key)) continue;\n  seen.add(key);\n\n  perSource[feed.source] = (perSource[feed.source] ?? 0) + 1;\n  if (perSource[feed.source] > cfg.maxPerSource) continue;\n\n  const hnPoints = feed.hn ? Number((clean(r.content || r.contentSnippet).match(/Points:\\s*(\\d+)/) || [])[1] || 0) : 0;\n\n  articles.push({\n    category: feed.category,\n    source: feed.source,\n    trust: feed.trust,\n    hnPoints,\n    title: clean(r.title),\n    url,\n    publishedAt: published.toISOString(),\n    snippet: clean(r.contentSnippet || r.content || r.summary).slice(0, 450),\n  });\n}\n\n// 최신순 정렬 후 개수 제한\narticles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));\nconst picked = articles.slice(0, cfg.maxItemsForGemini).map((a, id) => ({ id, ...a }));\n\nif (picked.length === 0) throw new Error('수집된 기사가 없습니다. RSS 피드 URL을 확인하세요.');\n\nconst prompt = `당신은 한국어 뉴스 브리핑 편집자입니다. 아래 기사 목록(JSON)을 검토해 결과를 JSON으로만 답하세요.\n\n각 기사(id 기준)에 대해:\n- keep: AI 카테고리에서 AI와 무관하거나, 광고·보도자료 홍보성·단순 목록 글이면 false. 국제 카테고리에서 연예·스포츠 단신이면 false.\n- titleKo: 자연스러운 한국어 제목 (원문이 한국어면 그대로)\n- summary: 사실만으로 2~3문장 한국어 요약. 제공된 내용에 없는 사실을 지어내지 말 것.\n- keyPoints: 핵심 2~3개 (각 40자 이내)\n- tags: 한국어 태그 2~4개 (예: LLM, 오픈소스, 규제, 반도체, 투자, 에이전트, 연구, 외교, 경제)\n- credibility: 1~5. 공식 발표·1차 출처·주요 통신사=5, 주요 언론=4, 전문 블로그·커뮤니티=3, 근거 부족·추측=1~2\n- impact: 0~100. 업계·사회에 미치는 영향과 화제성\n- storyKey: 같은 사건을 다룬 기사끼리 같은 값 (영문 소문자-하이픈, 예: \"eu-ai-act-guidance\")\n\n그리고 briefing: AI 카테고리의 오늘 핵심 흐름 3~4개를 마크다운 글머리표로 작성 (\"- **키워드**: 한 문장\").\n\n기사 목록:\n${JSON.stringify(picked.map(({ id, category, source, title, publishedAt, snippet }) => ({ id, category, source, title, publishedAt, snippet })))}`;\n\nconst geminiRequest = {\n  contents: [{ role: 'user', parts: [{ text: prompt }] }],\n  generationConfig: {\n    temperature: 0.3,\n    maxOutputTokens: 32768,\n    responseMimeType: 'application/json',\n    responseSchema: {\n      type: 'OBJECT',\n      properties: {\n        briefing: { type: 'STRING' },\n        items: {\n          type: 'ARRAY',\n          items: {\n            type: 'OBJECT',\n            properties: {\n              id: { type: 'INTEGER' },\n              keep: { type: 'BOOLEAN' },\n              titleKo: { type: 'STRING' },\n              summary: { type: 'STRING' },\n              keyPoints: { type: 'ARRAY', items: { type: 'STRING' } },\n              tags: { type: 'ARRAY', items: { type: 'STRING' } },\n              credibility: { type: 'INTEGER' },\n              impact: { type: 'INTEGER' },\n              storyKey: { type: 'STRING' },\n            },\n            required: ['id', 'keep', 'titleKo', 'summary', 'keyPoints', 'tags', 'credibility', 'impact', 'storyKey'],\n          },\n        },\n      },\n      required: ['briefing', 'items'],\n    },\n  },\n};\n\nreturn [{ json: { articles: picked, geminiRequest } }];\n"
-      },
-      "id": "30ad9992-8490-41ed-8d8a-0d042038a162",
-      "name": "기사 정리 & 프롬프트",
+      "id": "n05",
+      "name": "기사 정리",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
-        300
-      ]
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// 기간 필터, 중복 제거, 한도 적용. 기사 1건 = 출력 1개 (다음 노드에서 링크를 하나씩 확인)\nconst feeds = $('설정').all().map((i) => i.json);\nconst cfg = feeds[0].config;\nconst now = Date.now();\nconst DAY = 24 * 60 * 60 * 1000;\n\nconst hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\\./, ''); } catch { return ''; } };\n\nfunction feedFor(item) {\n  const p = item.pairedItem;\n  const idx = Array.isArray(p) ? p[0]?.item : typeof p === 'number' ? p : p?.item;\n  if (typeof idx === 'number' && feeds[idx]) return feeds[idx];\n  const h = hostOf(item.json.link);\n  return feeds.find((f) => { const fh = hostOf(f.url); return h && (h === fh || h.endsWith('.' + fh) || fh.endsWith('.' + h)); }) || null;\n}\n\n// 링크는 원문 그대로 씁니다 (상대 주소만 절대 주소로). http(s)가 아니면 버립니다.\nfunction articleUrl(link, base) {\n  try {\n    const u = new URL(String(link).trim(), base);\n    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;\n  } catch { return null; }\n}\n\n// 중복 비교용 키 (링크 자체는 바꾸지 않음)\nfunction dedupeKey(href) {\n  const x = new URL(href);\n  for (const k of [...x.searchParams.keys()]) if (k.toLowerCase().startsWith('utm_')) x.searchParams.delete(k);\n  x.hash = '';\n  x.protocol = 'https:';\n  return (x.hostname.replace(/^www\\./, '') + x.pathname.replace(/\\/$/, '') + x.search).toLowerCase();\n}\n\nconst stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\\s+/g, ' ').trim();\n\nconst seen = new Set();\nlet list = [];\n\nfor (const item of $input.all()) {\n  const j = item.json;\n  if (!j.link) continue; // 실패한 피드는 link 없이 error만 넘어옴\n  const feed = feedFor(item);\n  if (!feed) continue;\n\n  const url = articleUrl(j.link, feed.url);\n  if (!url) continue;\n  const key = dedupeKey(url);\n  if (seen.has(key)) continue;\n\n  const time = new Date(j.isoDate || j.pubDate || 0).getTime();\n  if (!time || Number.isNaN(time)) continue;\n  const days = feed.category === 'ai' ? cfg.aiDays : cfg.worldDays;\n  if (now - time > days * DAY || time - now > DAY) continue;\n\n  seen.add(key);\n  const raw = stripHtml(j.contentSnippet || j.content || j.description || '');\n  const hn = raw.match(/Points:\\s*(\\d+)/i);\n  list.push({\n    category: feed.category,\n    source: feed.source,\n    trust: feed.trust,\n    title: stripHtml(j.title),\n    url,\n    publishedAt: new Date(time).toISOString(),\n    snippet: raw.slice(0, 400),\n    hnPoints: hn ? Number(hn[1]) : 0,\n  });\n}\n\n// 매체당 최대 N건 (최신순), 전체 최대 M건\nconst perSource = new Map();\nlist.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));\nlist = list.filter((c) => {\n  const n = perSource.get(c.source) || 0;\n  if (n >= cfg.maxPerSource) return false;\n  perSource.set(c.source, n + 1);\n  return true;\n}).slice(0, cfg.maxTotal);\n\nif (list.length === 0) throw new Error('수집된 기사가 없습니다. \"RSS 읽기\" 출력의 error 항목을 확인하세요.');\n\nreturn list.map((a) => ({ json: a }));\n"
+      }
     },
     {
+      "id": "n05b",
+      "name": "링크 확인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
       "parameters": {
-        "method": "POST",
-        "url": "={{ `https://generativelanguage.googleapis.com/v1beta/models/${$('설정').first().json.geminiModel}:generateContent` }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.geminiRequest) }}",
+        "method": "HEAD",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,*/*;q=0.8"
+            }
+          ]
+        },
         "options": {
-          "timeout": 300000
+          "batching": {
+            "batch": {
+              "batchSize": 10,
+              "batchInterval": 300
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 10
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 15000
         }
       },
-      "id": "c8475241-af2e-4596-8132-bc63f1e165dc",
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "n05c",
+      "name": "프롬프트 생성",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// 링크 확인 결과로 열리지 않는 기사를 빼고 Gemini 요청을 만듭니다.\nconst cfg = $('설정').first().json.config;\nconst listed = $('기사 정리').all().map((i) => i.json);\n\n// 열리지 않는 링크로 판단: 404·410, 5xx(봇 차단 화면 제외), 연결 실패\n// 401·403·405·429 등은 사람이 브라우저로 열면 열리는 경우가 많아 살립니다.\nfunction isAlive(r) {\n  if (!r || r.error) return false;\n  const status = Number(r.statusCode);\n  if (!status) return false;\n  const h = r.headers || {};\n  if (h['cf-mitigated'] === 'challenge') return true;\n  if (status === 404 || status === 410) return false;\n  if (status >= 500 && status !== 501) return false;\n  return true;\n}\n\nconst alive = [];\nconst dead = [];\n$input.all().forEach((item, n) => {\n  const p = item.pairedItem;\n  const idx = (Array.isArray(p) ? p[0]?.item : typeof p === 'number' ? p : p?.item) ?? n;\n  const a = listed[idx];\n  if (!a) return;\n  if (isAlive(item.json)) alive.push(a);\n  else dead.push({ source: a.source, url: a.url, status: item.json.statusCode || String(item.json.error?.message || 'error').slice(0, 80) });\n});\n\nif (alive.length === 0) throw new Error('링크가 열리는 기사가 없습니다. 링크 확인 출력과 네트워크 상태를 확인하세요.');\n\nconst articles = alive.map((a, i) => ({ id: i, ...a }));\n\nconst prompt = `당신은 한국어 뉴스 편집자입니다. 아래 기사 목록(JSON Lines)을 읽고 기사마다 다음을 작성하세요.\n\n- titleKo: 자연스러운 한국어 제목 (원문이 한국어면 그대로 다듬기)\n- summary: 2~3문장 한국어 요약. 사실만, 과장 없이.\n- keyPoints: 핵심 내용 2~4개 (짧은 명사형 문장)\n- tags: 한국어 또는 널리 쓰는 영문 약어 태그 1~3개 (예: LLM, 에이전트, 오픈소스, 반도체, 규제, 연구, 투자, 외교, 경제, 분쟁, 기후)\n- credibility: 1~5. 공식 발표·1차 출처·주요 통신사 5, 주요 언론 4, 전문 블로그·커뮤니티 3, 근거 부족·추측·루머 1~2\n- impact: 0~100. 업계·사회에 미치는 영향과 화제성\n- storyKey: 같은 사건을 다룬 기사끼리 같은 값을 주세요. 짧은 영문 소문자 kebab-case (예: openai-gpt-launch). 다른 사건이면 다른 값.\n\n그리고 briefing 필드에 \"오늘의 브리핑\"을 Markdown으로 쓰세요. 형식은 정확히 다음과 같은 줄 3~5개입니다. 링크는 넣지 마세요.\n- **키워드**: 오늘의 핵심 흐름 한 문장\n\n모든 기사의 id를 빠짐없이 한 번씩 포함하세요. URL은 출력하지 마세요.\n\n기사 목록:\n${articles.map((a) => JSON.stringify({ id: a.id, category: a.category, source: a.source, title: a.title, publishedAt: a.publishedAt, snippet: a.snippet })).join('\\n')}`;\n\nconst requestBody = {\n  contents: [{ role: 'user', parts: [{ text: prompt }] }],\n  generationConfig: {\n    temperature: 0.3,\n    maxOutputTokens: 32768,\n    thinkingConfig: { thinkingBudget: 0 },\n    responseMimeType: 'application/json',\n    responseSchema: {\n      type: 'OBJECT',\n      properties: {\n        briefing: { type: 'STRING' },\n        items: {\n          type: 'ARRAY',\n          items: {\n            type: 'OBJECT',\n            properties: {\n              id: { type: 'INTEGER' },\n              titleKo: { type: 'STRING' },\n              summary: { type: 'STRING' },\n              keyPoints: { type: 'ARRAY', items: { type: 'STRING' } },\n              tags: { type: 'ARRAY', items: { type: 'STRING' } },\n              credibility: { type: 'INTEGER' },\n              impact: { type: 'INTEGER' },\n              storyKey: { type: 'STRING' },\n            },\n            required: ['id', 'titleKo', 'summary', 'keyPoints', 'tags', 'credibility', 'impact', 'storyKey'],\n          },\n        },\n      },\n      required: ['briefing', 'items'],\n    },\n  },\n};\n\nreturn [{ json: { articles, deadLinks: dead, requestBody } }];\n"
+      }
+    },
+    {
+      "id": "n06",
       "name": "Gemini 요약·평가",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
-        300
+        1320,
+        0
       ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('설정').first().json.config.geminiModel }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
       "retryOnFail": true,
       "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "notes": "Credential: Header Auth → Name: x-goog-api-key / Value: Gemini API 키"
+      "waitBetweenTries": 5000
     },
     {
-      "parameters": {
-        "jsCode": "// Gemini 결과 병합 → 인기도 계산 → Markdown 다이제스트 + Discord 메시지 생성\nconst cfg = $('설정').first().json;\nconst { articles } = $('기사 정리 & 프롬프트').first().json;\n\nconst text = $json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';\nlet result;\ntry { result = JSON.parse(text.replace(/```json|```/g, '').trim()); }\ncatch (e) { throw new Error('Gemini 응답을 JSON으로 읽지 못했습니다: ' + text.slice(0, 300)); }\n\nconst ai = new Map(result.items.map((r) => [r.id, r]));\nconst clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));\nconst now = Date.now();\n\n// 1) 병합\nlet merged = articles\n  .map((a) => ({ a, r: ai.get(a.id) }))\n  .filter(({ r }) => r && r.keep);\n\n// 2) 같은 사건(storyKey) 묶기 → 보도 매체 수(coverage)\nconst groups = new Map();\nfor (const m of merged) {\n  const k = `${m.a.category}:${m.r.storyKey || m.a.url}`;\n  groups.set(k, [...(groups.get(k) ?? []), m]);\n}\n\nconst items = [];\nfor (const group of groups.values()) {\n  // 대표 기사: 매체 신뢰도 높은 순 → 먼저 보도한 순\n  group.sort((x, y) => y.a.trust - x.a.trust || x.a.publishedAt.localeCompare(y.a.publishedAt));\n  const { a, r } = group[0];\n  const coverage = new Set(group.map((g) => g.a.source)).size;\n  const hn = Math.max(...group.map((g) => g.a.hnPoints || 0));\n  const ageH = (now - Date.parse(a.publishedAt)) / 36e5;\n\n  // 인기도 = Gemini 영향도 60% + 보도 매체 수 + HN 포인트 + 최신성\n  const hotScore = clamp(Math.round(\n    r.impact * 0.6 +\n    Math.min(coverage - 1, 4) * 6 +\n    Math.min(hn / 30, 10) +\n    (ageH < 24 ? 8 : ageH < 48 ? 4 : 0)\n  ), 0, 100);\n\n  items.push({\n    category: a.category,\n    title: a.title,\n    titleKo: r.titleKo,\n    source: a.source,\n    url: a.url,\n    publishedAt: a.publishedAt,\n    summary: r.summary,\n    keyPoints: (r.keyPoints || []).slice(0, 3),\n    tags: (r.tags || []).slice(0, 4),\n    credibility: clamp(Math.round((r.credibility + a.trust) / 2), 1, 5), // AI 판단 + 매체 기본값\n    hotScore,\n    coverage,\n  });\n}\nitems.sort((x, y) => y.publishedAt.localeCompare(x.publishedAt));\n\n// 3) Markdown (frontmatter의 각 항목은 JSON — YAML에서 그대로 읽힘)\nconst kst = new Date(now + 9 * 36e5);\nconst date = kst.toISOString().slice(0, 10);\nconst generatedAt = kst.toISOString().slice(0, 19) + '+09:00';\nconst md = [\n  '---',\n  `date: \"${date}\"`,\n  `generatedAt: \"${generatedAt}\"`,\n  'items:',\n  ...items.map((i) => '  - ' + JSON.stringify(i)),\n  '---',\n  '',\n  result.briefing.trim(),\n  '',\n].join('\\n');\n\n// 4) Discord 메시지\nconst top = (cat, n) => items.filter((i) => i.category === cat).sort((x, y) => y.hotScore - x.hotScore).slice(0, n);\nconst line = (i, k) => `**${k + 1}. [${i.titleKo}](${i.url})**\\n${i.source} · 인기도 ${i.hotScore}`;\nconst discord = {\n  username: 'AI 뉴스 브리프',\n  embeds: [\n    { title: `📰 ${date} AI 뉴스 브리핑`, url: cfg.siteUrl, description: result.briefing.slice(0, 1500), color: 0x2b4acb },\n    { title: '🔥 AI Hot News', url: `${cfg.siteUrl}/hot`, description: top('ai', 5).map(line).join('\\n\\n').slice(0, 4000), color: 0xc9430e },\n    { title: '🌍 국제 Hot News', url: `${cfg.siteUrl}/world`, description: top('world', 3).map(line).join('\\n\\n').slice(0, 4000) || '수집된 기사 없음', color: 0x0b7470 },\n  ],\n};\n\nreturn [{\n  json: {\n    path: `src/content/news/${date}.md`,\n    contentBase64: Buffer.from(md, 'utf8').toString('base64'),\n    commitMessage: `news: ${date} 다이제스트 (${items.length}건)`,\n    discord,\n    count: items.length,\n  },\n}];\n"
-      },
-      "id": "b1940677-753b-4e62-9634-81e3010deb2d",
+      "id": "n07",
       "name": "다이제스트 생성",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1320,
-        300
-      ]
+        1540,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Gemini 결과를 병합하고, 같은 사건을 묶고, 점수를 계산해 Markdown과 Discord 메시지를 만듭니다.\nconst cfg = $('설정').first().json.config;\nconst { articles } = $('프롬프트 생성').first().json;\nconst res = $input.first().json;\n\nconst text = (res.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');\nif (!text) throw new Error('Gemini 응답이 비어 있습니다: ' + JSON.stringify(res).slice(0, 500));\nlet out;\ntry {\n  out = JSON.parse(text.replace(/^```(?:json)?\\s*|\\s*```$/g, ''));\n} catch (e) {\n  throw new Error('Gemini 응답 JSON 파싱 실패 (출력이 잘렸을 수 있음, maxTotal을 줄여 보세요): ' + e.message);\n}\n\nconst byId = new Map((out.items || []).map((g) => [Number(g.id), g]));\nconst clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));\nconst now = Date.now();\nconst HOUR = 60 * 60 * 1000;\n\n// 1) 기사별 결과 병합 + 신뢰도\nconst merged = articles.map((a) => {\n  const g = byId.get(a.id) || {};\n  const gCred = clamp(Number(g.credibility) || a.trust, 1, 5);\n  return {\n    ...a,\n    titleKo: String(g.titleKo || a.title).trim(),\n    summary: String(g.summary || '').trim(),\n    keyPoints: Array.isArray(g.keyPoints) ? g.keyPoints.map(String).filter(Boolean).slice(0, 4) : [],\n    tags: Array.isArray(g.tags) ? [...new Set(g.tags.map((t) => String(t).replace(/^#/, '').trim()).filter(Boolean))].slice(0, 3) : [],\n    credibility: clamp(Math.round((gCred + a.trust) / 2), 1, 5),\n    impact: clamp(Number(g.impact) || 0, 0, 100),\n    storyKey: `${a.category}:${String(g.storyKey || 'id-' + a.id).toLowerCase().trim()}`,\n  };\n});\n\n// 2) 같은 사건 묶기: 매체 신뢰도가 가장 높은 기사를 대표로\nconst groups = new Map();\nfor (const m of merged) {\n  if (!groups.has(m.storyKey)) groups.set(m.storyKey, []);\n  groups.get(m.storyKey).push(m);\n}\n\nconst items = [];\nfor (const group of groups.values()) {\n  group.sort((a, b) => b.trust - a.trust || b.credibility - a.credibility || a.publishedAt.localeCompare(b.publishedAt));\n  const rep = group[0];\n  const coverage = new Set(group.map((g) => g.source)).size;\n  const hnPoints = Math.max(0, ...group.map((g) => g.hnPoints || 0));\n  const impact = Math.max(...group.map((g) => g.impact));\n  const age = now - new Date(rep.publishedAt).getTime();\n  const recency = age <= 24 * HOUR ? 8 : age <= 48 * HOUR ? 4 : 0;\n  const hotScore = clamp(Math.round(0.6 * impact + 6 * Math.min(coverage - 1, 4) + Math.min(hnPoints / 30, 10) + recency), 0, 100);\n  items.push({\n    category: rep.category,\n    title: rep.title,\n    titleKo: rep.titleKo,\n    source: rep.source,\n    url: rep.url,\n    publishedAt: rep.publishedAt,\n    summary: rep.summary,\n    keyPoints: rep.keyPoints,\n    tags: rep.tags,\n    credibility: rep.credibility,\n    hotScore,\n    coverage,\n  });\n}\nitems.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));\n\n// 3) KST 날짜와 시각\nconst kst = new Date(now + 9 * HOUR);\nconst date = kst.toISOString().slice(0, 10);\nconst generatedAt = kst.toISOString().slice(0, 19) + '+09:00';\n\n// 4) Markdown (frontmatter의 기사 1건 = JSON 한 줄. YAML에서 그대로 읽힘)\nconst briefing = String(out.briefing || '').replace(/\\[([^\\]]+)\\]\\([^)]*\\)/g, '$1').replace(/https?:\\/\\/\\S+/g, '').trim() || '- **오늘의 흐름**: 브리핑을 만들지 못했습니다.';\nconst md = [\n  '---',\n  `date: \"${date}\"`,\n  `generatedAt: \"${generatedAt}\"`,\n  'items:',\n  ...items.map((i) => '  - ' + JSON.stringify(i)),\n  '---',\n  '',\n  briefing,\n  '',\n].join('\\n');\n\n// 5) Discord 메시지 (임베드 3개)\nconst site = String(cfg.siteUrl).replace(/\\/$/, '');\nconst recent = (i) => now - new Date(i.publishedAt).getTime() <= 3 * 24 * HOUR;\nconst top = (cat, n) => items.filter((i) => i.category === cat && recent(i)).sort((a, b) => b.hotScore - a.hotScore).slice(0, n);\nconst cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);\nconst list = (arr) => arr.length\n  ? arr.map((i, k) => `**${k + 1}. [${cut(i.titleKo, 90)}](${i.url})**\\n${i.source} · 인기도 ${i.hotScore}${i.coverage > 1 ? ` · ${i.coverage}개 매체` : ''}`).join('\\n\\n')\n  : '해당 기간 기사가 없습니다.';\n\nconst discordPayload = {\n  username: 'AI 뉴스 브리프',\n  embeds: [\n    { title: `오늘의 브리핑 (${date})`, url: site + '/', description: cut(briefing, 4000), color: 0x2f5fd0 },\n    { title: 'AI Hot 5', url: site + '/hot', description: cut(list(top('ai', 5)), 4000), color: 0xe2620f },\n    { title: '국제 Hot 3', url: site + '/world', description: cut(list(top('world', 3)), 4000), color: 0x0e8a8c },\n  ],\n};\n\nconst path = `${String(cfg.contentDir).replace(/\\/$/, '')}/${date}.md`;\n\nreturn [{\n  json: {\n    date,\n    path,\n    itemCount: items.length,\n    commitMessage: `news: ${date} 다이제스트 (${items.length}건)`,\n    contentBase64: Buffer.from(md, 'utf8').toString('base64'),\n    discordPayload,\n  },\n}];\n"
+      }
     },
     {
+      "id": "n08",
+      "name": "GitHub 기존 파일 확인",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        0
+      ],
       "parameters": {
         "method": "GET",
-        "url": "={{ `https://api.github.com/repos/${$('설정').first().json.githubOwner}/${$('설정').first().json.githubRepo}/contents/${$json.path}?ref=${$('설정').first().json.githubBranch}` }}",
+        "url": "=https://api.github.com/repos/{{ $('설정').first().json.config.githubOwner }}/{{ $('설정').first().json.config.githubRepo }}/contents/{{ $('다이제스트 생성').first().json.path }}?ref={{ $('설정').first().json.config.githubBranch }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "githubApi",
         "sendHeaders": true,
@@ -142,20 +202,21 @@
           }
         }
       },
-      "id": "b29af09f-1094-45e7-87f3-4224aebaee3f",
-      "name": "GitHub 기존 파일 확인",
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "n09",
+      "name": "GitHub 커밋",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1540,
-        300
+        1980,
+        0
       ],
-      "notes": "같은 날 다시 실행하면 파일을 덮어쓰기 위해 sha를 조회합니다 (없으면 404, 정상)"
-    },
-    {
       "parameters": {
         "method": "PUT",
-        "url": "={{ `https://api.github.com/repos/${$('설정').first().json.githubOwner}/${$('설정').first().json.githubRepo}/contents/${$('다이제스트 생성').first().json.path}` }}",
+        "url": "=https://api.github.com/repos/{{ $('설정').first().json.config.githubOwner }}/{{ $('설정').first().json.config.githubRepo }}/contents/{{ $('다이제스트 생성').first().json.path }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "githubApi",
         "sendHeaders": true,
@@ -173,36 +234,31 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify(Object.assign({ message: $('다이제스트 생성').first().json.commitMessage, content: $('다이제스트 생성').first().json.contentBase64, branch: $('설정').first().json.githubBranch }, $json.sha ? { sha: $json.sha } : {})) }}",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ message: $('다이제스트 생성').first().json.commitMessage, content: $('다이제스트 생성').first().json.contentBase64, branch: $('설정').first().json.config.githubBranch }, $json.sha ? { sha: $json.sha } : {})) }}",
         "options": {}
       },
-      "id": "2541f932-70be-43c5-94ea-371822e8fd22",
-      "name": "GitHub 커밋",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1760,
-        300
-      ],
-      "notes": "커밋되면 Vercel이 자동으로 다시 배포합니다"
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $('설정').first().json.discordWebhookUrl }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('다이제스트 생성').first().json.discord) }}",
-        "options": {}
-      },
-      "id": "9a6998f2-2673-47bf-a468-bd8525ad5d57",
+      "id": "n10",
       "name": "Discord 알림",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1980,
-        300
-      ]
+        2200,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('설정').first().json.config.discordWebhookUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('다이제스트 생성').first().json.discordPayload) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -221,17 +277,6 @@
       "main": [
         [
           {
-            "node": "RSS 피드 목록",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "RSS 피드 목록": {
-      "main": [
-        [
-          {
             "node": "RSS 읽기",
             "type": "main",
             "index": 0
@@ -243,14 +288,36 @@
       "main": [
         [
           {
-            "node": "기사 정리 & 프롬프트",
+            "node": "기사 정리",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "기사 정리 & 프롬프트": {
+    "기사 정리": {
+      "main": [
+        [
+          {
+            "node": "링크 확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "링크 확인": {
+      "main": [
+        [
+          {
+            "node": "프롬프트 생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "프롬프트 생성": {
       "main": [
         [
           {
@@ -308,7 +375,11 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "timezone": "Asia/Seoul"
+    "timezone": "Asia/Seoul",
+    "saveManualExecutions": true
   },
-  "pinData": {}
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
 }

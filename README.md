@@ -1,79 +1,47 @@
 # AI 뉴스 브리프
 
-매일 아침 RSS로 AI·국제 뉴스를 모으고, Gemini가 요약·평가해 Astro 정적 사이트로 보여 줍니다.
+매일 오전 7시(KST)에 AI·국제 뉴스 RSS를 모아 Gemini가 한국어로 요약·평가하고, Astro 정적 사이트로 보여 줍니다.
 
-```
-n8n (매일 07:00 KST)
- ├─ RSS 피드 15곳 수집 → 기간 필터·중복 제거
- ├─ Gemini: 한국어 제목/요약/핵심/태그, 신뢰도(1~5), 영향도(0~100), 같은 사건 묶기
- ├─ 인기도 계산 → src/content/news/YYYY-MM-DD.md 생성
- ├─ GitHub API로 커밋  ──▶  Vercel 자동 배포 (Astro 빌드)
- └─ Discord 웹훅으로 오늘의 브리핑 + Hot 5 알림
-```
+| 메뉴 | 주소 | 내용 |
+| --- | --- | --- |
+| AI 최근1주일 News | `/` | 신뢰도 3 이상, 최근 7일 AI 기사 (날짜별, 태그 필터, 오늘의 브리핑) |
+| AI Hot News | `/hot` | 최근 3일 AI 기사 인기도 상위 15건 |
+| 국제 Hot News | `/world` | 최근 3일 세계 뉴스 인기도 상위 15건 |
 
-## 메뉴별 선정 기준 (`src/lib/news.ts`의 `RULES`)
+흐름: n8n(매일 07:00) → RSS 15곳 → 링크 확인 → Gemini → `src/content/news/YYYY-MM-DD.md` 커밋 → Vercel 자동 배포 → Discord 알림
 
-| 메뉴 | 대상 | 기간 | 정렬 |
-|---|---|---|---|
-| AI 최근1주일 News | AI, 신뢰도 3 이상 | 7일 | 최신순, 날짜별 묶음 + 태그 필터 |
-| AI Hot News | AI | 3일 | 인기도 순 상위 15 |
-| 국제 Hot News | 국제 | 3일 | 인기도 순 상위 15 |
+## 설치
 
-- **신뢰도** = (Gemini 판단 + 매체 기본 신뢰도 `trust`) ÷ 2
-- **인기도** = Gemini 영향도×0.6 + 같은 사건 보도 매체 수 + Hacker News 포인트 + 최신성
-  (RSS에는 조회수가 없어서 "여러 매체가 동시에 다뤘는가"를 핵심 인기 신호로 씁니다)
+1. GitHub에 빈 저장소 `ai-news-site`를 만들고 이 폴더를 push합니다.
+2. Vercel에서 저장소를 Import합니다. 설정은 기본값 그대로 두면 됩니다 (Node 버전은 `package.json`의 `engines`, 사이트 주소는 Vercel 운영 도메인을 자동으로 씁니다).
+3. n8n에서 `n8n/ai-news-workflow.json`을 Import하고 "설정" 노드의 `githubOwner`, `siteUrl`, `discordWebhookUrl`을 채웁니다.
+4. 자격 증명을 연결합니다.
+   - "Gemini 요약·평가": Header Auth, Name `x-goog-api-key`, Value는 Google AI Studio API 키
+   - "GitHub 기존 파일 확인", "GitHub 커밋": GitHub API 자격 증명 (Fine-grained 토큰, 해당 저장소 Contents Read and write)
+5. 수동 실행 후 GitHub 커밋, Vercel 배포, Discord 알림을 확인하고 워크플로를 활성화합니다.
 
-## 1. 로컬 실행
+첫 실행 전에는 사이트에 "아직 표시할 기사가 없습니다"가 보이는 것이 정상입니다.
 
-```bash
-npm install
-npm run dev     # http://localhost:4321
-```
-`src/content/news/` 의 2026-10-29, 2026-10-30 파일은 **디자인 확인용 가상 데이터**입니다. 실제 운영 전에 지우세요.
+로컬에서 보려면 Node.js 22.23.4 이상에서 `npm install`, `npm run dev` 후 `http://localhost:4321`을 엽니다.
 
-## 2. GitHub + Vercel
+## 링크가 항상 열리도록 하는 장치
 
-1. 이 폴더를 GitHub 저장소로 push
-2. Vercel → Add New Project → 저장소 선택 → Framework: **Astro** (설정 변경 없이 Deploy)
-3. `astro.config.mjs`의 `site`를 실제 도메인으로 수정
-4. (선택) Vercel 환경변수 `PUBLIC_DISCORD_INVITE` = Discord 초대 링크 → 사이드바에 "Discord에서 알림 받기" 표시
+- 기사 링크는 RSS 원문 주소를 그대로 씁니다. 상대 주소만 절대 주소로 바꾸고, http(s)가 아닌 주소는 버립니다. 중복 비교용 키는 따로 만들어 링크 자체는 건드리지 않습니다.
+- "링크 확인" 노드가 모든 기사 주소를 실제로 열어 보고, 404·410·서버 오류·연결 실패인 기사는 Gemini에 보내기 전에 뺍니다. 봇을 막는 사이트(401·403·429 등)는 브라우저에서는 열리므로 살립니다. 뺀 기사는 "프롬프트 생성" 출력의 `deadLinks`에서 볼 수 있습니다.
+- Gemini는 URL을 만들지 않습니다. 기사 번호로만 결과를 돌려받고 링크는 원래 값을 붙입니다. 브리핑에 링크가 섞여 오면 지웁니다.
+- 사이트도 빌드할 때 웹 주소가 아닌 링크를 한 번 더 걸러 냅니다.
 
-## 3. n8n
+## 바꿀 곳
 
-1. Workflows → Import from File → `n8n/ai-news-workflow.json`
-2. **설정** 노드에서 GitHub 아이디·저장소, 사이트 주소, Discord 웹훅 URL 입력
-3. 자격 증명 연결
-   - **Gemini 요약·평가**: Header Auth → Name `x-goog-api-key`, Value = [Google AI Studio](https://aistudio.google.com/apikey) API 키
-   - **GitHub 기존 파일 확인 / GitHub 커밋**: GitHub API 자격 증명 (Fine-grained 토큰, 해당 저장소 *Contents: Read and write*)
-4. **Discord 웹훅**: 채널 설정 → 연동 → 웹후크 → 새 웹후크 → URL 복사
-5. 수동 실행으로 확인 후 워크플로 활성화 (시간대는 워크플로 설정에서 Asia/Seoul)
+| 바꾸고 싶은 것 | 위치 |
+| --- | --- |
+| 기간·신뢰도·순위 개수 | `src/lib/news.ts`의 `RULES` |
+| 매체, Gemini 모델, 수집 한도 | n8n "설정" 노드 |
+| 수집 시각 | n8n "매일 07:00" 노드의 cron |
+| 색·글꼴 | `src/styles/global.css` |
 
-### 확인할 점
-- **RSS 주소**: 매체 사정으로 바뀔 수 있습니다. 첫 실행 때 "RSS 읽기" 노드 출력을 보고 비어 있는 피드는 `RSS 피드 목록` 노드에서 교체하세요. 실패한 피드는 건너뛰고 계속 진행합니다.
-- **Gemini 모델**: 기본값 `gemini-2.5-flash`. 더 새 모델을 쓰려면 설정 노드의 `geminiModel`만 바꾸면 됩니다.
-- **같은 날 재실행**: 같은 날짜 파일을 덮어씁니다 (sha 조회 후 업데이트).
-- **커밋은 하루 1번**이라 Vercel 배포도 하루 1번만 일어납니다.
+## 점수
 
-## 파일 구조
-
-```
-src/
-  content.config.ts      # 다이제스트 스키마
-  content/news/*.md      # n8n이 매일 커밋하는 파일 (frontmatter=기사, 본문=오늘의 브리핑)
-  lib/news.ts            # 메뉴별 필터·정렬 기준
-  layouts/BaseLayout.astro
-  components/            # Sidebar, NewsItem, HotItem, Credibility …
-  pages/index.astro      # AI 최근1주일 News
-  pages/hot.astro        # AI Hot News
-  pages/world.astro      # 국제 Hot News
-  styles/global.css      # 디자인 토큰 (라이트/다크)
-n8n/ai-news-workflow.json
-```
-
-## 디자인
-
-- 글꼴: Pretendard (한글 가독성), 본문 16px / 행간 1.7, `word-break: keep-all`로 단어 단위 줄바꿈
-- 데스크톱: 왼쪽 고정 메뉴 + 본문 최대 46rem. 모바일: 상단 고정 탭
-- 메뉴마다 고유 색(파랑·주황·청록)으로 현재 위치 표시, 날짜 제목은 스크롤 중에도 상단에 고정
-- 기사 카드: 매체·시간·신뢰도 → 한국어 제목(원문 링크) → 원제 → 요약 → 핵심 내용(펼치기) → 태그·원문 보기
-- 시스템 다크 모드 자동 지원
+- 신뢰도(1~5) = round((Gemini 신뢰도 + 매체 trust) / 2)
+- 인기도(0~100) = 0.6 × impact + 6 × min(coverage − 1, 4) + min(HN points / 30, 10) + recency(24시간 이내 +8, 48시간 이내 +4)
+- 기준 시각은 빌드 시각이 아니라 마지막 수집 시각(`generatedAt`)입니다.

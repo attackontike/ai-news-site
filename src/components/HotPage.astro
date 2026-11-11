@@ -1,0 +1,29 @@
+---
+import HotItem from './HotItem.astro';
+import type { NewsItem } from '../lib/news';
+
+interface Props {
+  title: string;
+  lead: string;
+  items: NewsItem[];
+}
+
+const { title, lead, items } = Astro.props;
+---
+
+<header class="page-head">
+  <h1>{title}</h1>
+  <p>{lead}</p>
+</header>
+
+{
+  items.length === 0 ? (
+    <p class="empty">아직 표시할 기사가 없습니다. n8n 워크플로를 한 번 실행하면 이곳에 순위가 채워집니다.</p>
+  ) : (
+    <ol class="hot-list">
+      {items.map((item, i) => (
+        <HotItem item={item} rank={i + 1} />
+      ))}
+    </ol>
+  )
+}
