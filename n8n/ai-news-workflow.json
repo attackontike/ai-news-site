@@ -37,16 +37,49 @@
     {
       "id": "n04",
       "name": "RSS 읽기",
-      "type": "n8n-nodes-base.rssFeedRead",
-      "typeVersion": 1.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         440,
         0
       ],
       "parameters": {
+        "method": "GET",
         "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8"
+            }
+          ]
+        },
         "options": {
-          "ignoreSSL": false
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 200
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 10
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 20000
         }
       },
       "onError": "continueRegularOutput",
@@ -62,7 +95,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// 기간 필터, 중복 제거, 한도 적용. 기사 1건 = 출력 1개 (다음 노드에서 링크를 하나씩 확인)\nconst feeds = $('설정').all().map((i) => i.json);\nconst cfg = feeds[0].config;\nconst now = Date.now();\nconst DAY = 24 * 60 * 60 * 1000;\n\nconst hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\\./, ''); } catch { return ''; } };\n\nfunction feedFor(item) {\n  const p = item.pairedItem;\n  const idx = Array.isArray(p) ? p[0]?.item : typeof p === 'number' ? p : p?.item;\n  if (typeof idx === 'number' && feeds[idx]) return feeds[idx];\n  const h = hostOf(item.json.link);\n  return feeds.find((f) => { const fh = hostOf(f.url); return h && (h === fh || h.endsWith('.' + fh) || fh.endsWith('.' + h)); }) || null;\n}\n\n// 링크는 원문 그대로 씁니다 (상대 주소만 절대 주소로). http(s)가 아니면 버립니다.\nfunction articleUrl(link, base) {\n  try {\n    const u = new URL(String(link).trim(), base);\n    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;\n  } catch { return null; }\n}\n\n// 중복 비교용 키 (링크 자체는 바꾸지 않음)\nfunction dedupeKey(href) {\n  const x = new URL(href);\n  for (const k of [...x.searchParams.keys()]) if (k.toLowerCase().startsWith('utm_')) x.searchParams.delete(k);\n  x.hash = '';\n  x.protocol = 'https:';\n  return (x.hostname.replace(/^www\\./, '') + x.pathname.replace(/\\/$/, '') + x.search).toLowerCase();\n}\n\nconst stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\\s+/g, ' ').trim();\n\nconst seen = new Set();\nlet list = [];\n\nfor (const item of $input.all()) {\n  const j = item.json;\n  if (!j.link) continue; // 실패한 피드는 link 없이 error만 넘어옴\n  const feed = feedFor(item);\n  if (!feed) continue;\n\n  const url = articleUrl(j.link, feed.url);\n  if (!url) continue;\n  const key = dedupeKey(url);\n  if (seen.has(key)) continue;\n\n  const time = new Date(j.isoDate || j.pubDate || 0).getTime();\n  if (!time || Number.isNaN(time)) continue;\n  const days = feed.category === 'ai' ? cfg.aiDays : cfg.worldDays;\n  if (now - time > days * DAY || time - now > DAY) continue;\n\n  seen.add(key);\n  const raw = stripHtml(j.contentSnippet || j.content || j.description || '');\n  const hn = raw.match(/Points:\\s*(\\d+)/i);\n  list.push({\n    category: feed.category,\n    source: feed.source,\n    trust: feed.trust,\n    title: stripHtml(j.title),\n    url,\n    publishedAt: new Date(time).toISOString(),\n    snippet: raw.slice(0, 400),\n    hnPoints: hn ? Number(hn[1]) : 0,\n  });\n}\n\n// 매체당 최대 N건 (최신순), 전체 최대 M건\nconst perSource = new Map();\nlist.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));\nlist = list.filter((c) => {\n  const n = perSource.get(c.source) || 0;\n  if (n >= cfg.maxPerSource) return false;\n  perSource.set(c.source, n + 1);\n  return true;\n}).slice(0, cfg.maxTotal);\n\nif (list.length === 0) throw new Error('수집된 기사가 없습니다. \"RSS 읽기\" 출력의 error 항목을 확인하세요.');\n\nreturn list.map((a) => ({ json: a }));\n"
+        "jsCode": "// RSS/Atom을 직접 읽어 기사로 바꾸고, 기간 필터·중복 제거·한도를 적용합니다.\n// 기사 1건 = 출력 1개 (다음 노드에서 링크를 하나씩 확인)\nconst feeds = $('설정').all().map((i) => i.json);\nconst cfg = feeds[0].config;\nconst now = Date.now();\nconst DAY = 24 * 60 * 60 * 1000;\n\n// ── XML 읽기 도우미 ──\nfunction decode(s) {\n  if (s == null) return '';\n  const str = String(s);\n  const cdata = str.match(/^\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*$/);\n  if (cdata) return cdata[1].trim();\n  return str\n    .replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1')\n    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"')\n    .replace(/&#39;|&apos;/g, \"'\")\n    .replace(/&#(\\d+);/g, (_, n) => String.fromCodePoint(Number(n)))\n    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))\n    .replace(/&amp;/g, '&')\n    .trim();\n}\nfunction tag(block, names) {\n  for (const name of names) {\n    const m = block.match(new RegExp(`<${name}(?:\\\\s[^>]*)?>([\\\\s\\\\S]*?)</${name}>`, 'i'));\n    if (m && m[1].trim()) return decode(m[1]);\n  }\n  return '';\n}\nfunction attr(tagText, name) {\n  const m = tagText.match(new RegExp(`\\\\s${name}\\\\s*=\\\\s*([\"'])([\\\\s\\\\S]*?)\\\\1`, 'i'));\n  return m ? decode(m[2]) : '';\n}\nfunction linkOf(block) {\n  // Atom: <link rel=\"alternate\" href=\"...\"/> 우선, 다음은 rel 없는 link\n  const links = block.match(/<link\\b[^>]*\\/?>/gi) || [];\n  let fallback = '';\n  for (const l of links) {\n    const href = attr(l, 'href');\n    if (!href) continue;\n    const rel = attr(l, 'rel').toLowerCase();\n    if (rel === 'alternate') return href;\n    if (!rel && !fallback) fallback = href;\n  }\n  if (fallback) return fallback;\n  // RSS: <link>주소</link>\n  const rss = tag(block, ['link']);\n  if (rss) return rss;\n  // 마지막 수단: 고유 링크로 표시된 guid\n  const g = block.match(/<guid\\b([^>]*)>([\\s\\S]*?)<\\/guid>/i);\n  if (g && !/isPermaLink\\s*=\\s*[\"']false/i.test(g[1])) return decode(g[2]);\n  return '';\n}\nfunction parseFeed(xml) {\n  const blocks = xml.match(/<item[\\s>][\\s\\S]*?<\\/item>/gi) || xml.match(/<entry[\\s>][\\s\\S]*?<\\/entry>/gi) || [];\n  return blocks.map((b) => ({\n    title: tag(b, ['title']),\n    link: linkOf(b),\n    date: tag(b, ['pubDate', 'published', 'dc:date', 'updated']),\n    text: tag(b, ['description', 'summary', 'content:encoded', 'content']),\n  }));\n}\n\n// 링크는 원문 그대로 씁니다 (상대 주소만 절대 주소로). http(s)가 아니면 버립니다.\nfunction articleUrl(link, base) {\n  try {\n    const u = new URL(String(link).trim(), base);\n    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;\n  } catch { return null; }\n}\n// 중복 비교용 키 (링크 자체는 바꾸지 않음)\nfunction dedupeKey(href) {\n  const x = new URL(href);\n  for (const k of [...x.searchParams.keys()]) if (k.toLowerCase().startsWith('utm_')) x.searchParams.delete(k);\n  return (x.hostname.replace(/^www\\./, '') + x.pathname.replace(/\\/$/, '') + x.search).toLowerCase();\n}\nconst stripHtml = (s) => decode(String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ')).replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();\n\n// ── 피드별 처리 ──\nconst seen = new Set();\nconst report = [];\nlet list = [];\n\n$input.all().forEach((item, n) => {\n  const p = item.pairedItem;\n  const idx = (Array.isArray(p) ? p[0]?.item : typeof p === 'number' ? p : p?.item) ?? n;\n  const feed = feeds[idx];\n  if (!feed) return;\n\n  const j = item.json;\n  const status = Number(j.statusCode) || 0;\n  const body = typeof j.body === 'string' ? j.body : typeof j.data === 'string' ? j.data : '';\n  if (j.error || status >= 400 || !body) {\n    report.push(`${feed.source}: 실패(${status || String(j.error?.message || '응답 없음').slice(0, 40)})`);\n    return;\n  }\n\n  const entries = parseFeed(body);\n  const days = feed.category === 'ai' ? cfg.aiDays : cfg.worldDays;\n  let kept = 0;\n  for (const e of entries) {\n    const url = articleUrl(e.link, feed.url);\n    if (!url) continue;\n    const key = dedupeKey(url);\n    if (seen.has(key)) continue;\n    const time = new Date(e.date).getTime();\n    if (!time || Number.isNaN(time)) continue;\n    if (now - time > days * DAY || time - now > DAY) continue;\n\n    seen.add(key);\n    kept++;\n    const raw = stripHtml(e.text);\n    const hn = raw.match(/Points:\\s*(\\d+)/i);\n    list.push({\n      category: feed.category,\n      source: feed.source,\n      trust: feed.trust,\n      title: stripHtml(e.title),\n      url,\n      publishedAt: new Date(time).toISOString(),\n      snippet: raw.slice(0, 400),\n      hnPoints: hn ? Number(hn[1]) : 0,\n    });\n  }\n  report.push(`${feed.source}: 기사 ${entries.length}건 중 기간 내 ${kept}건`);\n});\n\n// 매체당 최대 N건 (최신순), 전체 최대 M건\nconst perSource = new Map();\nlist.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));\nlist = list.filter((c) => {\n  const n = perSource.get(c.source) || 0;\n  if (n >= cfg.maxPerSource) return false;\n  perSource.set(c.source, n + 1);\n  return true;\n}).slice(0, cfg.maxTotal);\n\nif (list.length === 0) {\n  throw new Error(`수집된 기사가 없습니다. 입력 ${$input.all().length}건. 피드별 결과: ${report.join(' / ') || '없음'}`);\n}\n\nreturn list.map((a) => ({ json: a }));\n"
       }
     },
     {
